@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ArchiveState {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ScanIntent {
+  FOUND
+  AUDIT
+  CHECKOUT
+  CHECKIN
+  MOVE
+}
+
+enum CheckoutStatus {
+  OPEN
+  RETURNED
+  OVERDUE
+}
+
+enum ReviewStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?  @unique
+  role      String   @default("tech")
+  createdAt DateTime @default(now())
+  scans     Scan[]
+}
+
+model Item {
+  id            String       @id @default(cuid())
+  assetTag      String       @unique
+  name          String
+  category      String?
+  manufacturer  String?
+  model         String?
+  serialNumber  String?
+  notes         String?
+  archiveState  ArchiveState @default(ACTIVE)
+  archivedAt    DateTime?
+  homeLocationId String?
+  foundLocationId String?
+  lastScannedAt DateTime?
+  lastScannedBy String?
+  lastLatitude  Float?
+  lastLongitude Float?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  homeLocation  Location?    @relation("ItemHomeLocation", fields: [homeLocationId], references: [id])
+  foundLocation Location?    @relation("ItemFoundLocation", fields: [foundLocationId], references: [id])
+  scans         Scan[]
+  photos        Photo[]
+  checkouts     Checkout[]
+  correctionLogs CorrectionLog[]
+  reviewQueue   ReviewQueue[]
+}
+
+model Location {
+  id            String       @id @default(cuid())
+  name          String       @unique
+  type          String       @default("storage")
+  archiveState  ArchiveState @default(ACTIVE)
+  archivedAt    DateTime?
+  healthScore   Int?
+  latitude      Float?
+  longitude     Float?
+  notes         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  homeItems     Item[]       @relation("ItemHomeLocation")
+  foundItems    Item[]       @relation("ItemFoundLocation")
+  scans         Scan[]
+  auditSessions AuditSession[]
+}
+
+model Scan {
+  id          String     @id @default(cuid())
+  itemId      String
+  userId      String?
+  locationId  String?
+  intent      ScanIntent @default(FOUND)
+  scannedAt   DateTime   @default(now())
+  latitude    Float?
+  longitude   Float?
+  source      String     @default("mobile")
+  rawPayload  String?
+  createdAt   DateTime   @default(now())
+
+  item        Item       @relation(fields: [itemId], references: [id])
+  user        User?      @relation(fields: [userId], references: [id])
+  location    Location?  @relation(fields: [locationId], references: [id])
+
+  @@index([itemId, scannedAt])
+  @@index([locationId, scannedAt])
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  itemId    String
+  url       String
+  caption   String?
+  createdAt DateTime @default(now())
+
+  item      Item     @relation(fields: [itemId], references: [id])
+}
+
+model Checkout {
+  id          String         @id @default(cuid())
+  itemId      String
+  checkedOutTo String
+  status      CheckoutStatus @default(OPEN)
+  dueAt       DateTime?
+  checkedOutAt DateTime     @default(now())
+  returnedAt  DateTime?
+  notes       String?
+
+  item        Item           @relation(fields: [itemId], references: [id])
+}
+
+model AuditSession {
+  id          String    @id @default(cuid())
+  locationId  String
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  expectedCount Int      @default(0)
+  foundCount   Int      @default(0)
+  missingCount Int      @default(0)
+  notes       String?
+
+  location    Location  @relation(fields: [locationId], references: [id])
+}
+
+model CorrectionLog {
+  id        String   @id @default(cuid())
+  itemId    String
+  fieldName String
+  oldValue  String?
+  newValue  String?
+  reason    String?
+  createdAt DateTime @default(now())
+
+  item      Item     @relation(fields: [itemId], references: [id])
+}
+
+model ReviewQueue {
+  id        String       @id @default(cuid())
+  itemId    String?
+  title     String
+  status    ReviewStatus @default(OPEN)
+  detail    String?
+  createdAt DateTime     @default(now())
+  resolvedAt DateTime?
+
+  item      Item?        @relation(fields: [itemId], references: [id])
+}
